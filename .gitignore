@@ -1,1 +1,23 @@
+# Node modules
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
 .env
+
+# Vercel
+.vercel/
+
+# OS-Dateien
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
