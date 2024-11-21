@@ -1,145 +1,41 @@
-// server.js
+// api/index.js
 
 const express = require('express');
+const app = express();
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const app = express();
 const bcrypt = require('bcrypt');
-const mysql = require('mysql2');
+const mysql = require('mysql2/promise');
 const jwt = require('jsonwebtoken');
-require('dotenv').config(); // Umgebungsvariablen laden
 
-// Uncaught Exception und Unhandled Rejection behandeln
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err.stack || err);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-// Datenbankverbindung herstellen
-const db = mysql.createConnection({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER, // Ihr MySQL-Benutzername
-  password: process.env.DB_PASSWORD, // Ihr MySQL-Passwort
-  database: process.env.DB_DATABASE,
-});
-
-db.connect((err) => {
-  if (err) {
-    console.error('Fehler beim Verbinden mit der Datenbank:', err);
-    return;
-  }
-  console.log('Mit der Datenbank verbunden');
-});
-
-// Middleware einrichten
+// Middleware
 app.use(bodyParser.json());
 app.use(cors());
 
-// Test-Route
-app.get('/', (req, res) => {
-  res.send('Der Server läuft!');
-});
+// Datenbankverbindung
+const dbConfig = {
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_DATABASE,
+};
 
-// Registrierungs-Endpunkt
-app.post('/register', (req, res) => {
-  const { username, password, email } = req.body;
+let connection;
 
-  // Eingaben validieren
-  if (!username || !password || !email) {
-    return res.status(400).json({ message: 'Bitte füllen Sie alle Felder aus.' });
+// Verbindung zur Datenbank herstellen
+const connectDB = async () => {
+  if (!connection) {
+    connection = await mysql.createConnection(dbConfig);
+    console.log('Mit der Datenbank verbunden');
   }
+};
 
-  // Prüfen, ob der Benutzer bereits existiert
-  const checkUserQuery = 'SELECT * FROM users WHERE username = ? OR email = ?';
-  db.query(checkUserQuery, [username, email], (err, results) => {
-    if (err) {
-      console.error('Fehler beim Überprüfen des Benutzers:', err);
-      return res.status(500).json({ message: 'Serverfehler' });
-    }
-    if (results.length > 0) {
-      return res.status(409).json({ message: 'Benutzername oder E-Mail existiert bereits.' });
-    } else {
-      // Passwort hashen
-      const saltRounds = 10;
-      bcrypt.hash(password, saltRounds, (err, hash) => {
-        if (err) {
-          console.error('Fehler beim Hashen des Passworts:', err);
-          return res.status(500).json({ message: 'Serverfehler' });
-        }
-
-        // Neuen Benutzer einfügen
-        const insertUserQuery = 'INSERT INTO users (username, password, email) VALUES (?, ?, ?)';
-        db.query(insertUserQuery, [username, hash, email], (err, results) => {
-          if (err) {
-            console.error('Fehler beim Einfügen des Benutzers:', err);
-            return res.status(500).json({ message: 'Serverfehler' });
-          }
-          res.status(200).json({ message: 'Benutzer erfolgreich registriert.' });
-        });
-      });
-    }
-  });
-});
-
-app.post('/login', (req, res) => {
-  const { username, password } = req.body;
-
-  // Eingaben validieren
-  if (!username || !password) {
-    return res.status(400).json({ message: 'Bitte geben Sie Benutzername und Passwort ein.' });
-  }
-
-  // Benutzer in der Datenbank suchen
-  const findUserQuery = 'SELECT * FROM users WHERE username = ?';
-  db.query(findUserQuery, [username], (err, results) => {
-    if (err) {
-      console.error('Fehler beim Suchen des Benutzers:', err);
-      return res.status(500).json({ message: 'Serverfehler' });
-    }
-
-    if (results.length === 0) {
-      return res.status(401).json({ message: 'Ungültiger Benutzername oder Passwort.' });
-    }
-
-    const user = results[0];
-
-    // Passwort überprüfen
-    bcrypt.compare(password, user.password, (err, isMatch) => {
-      if (err) {
-        console.error('Fehler beim Vergleichen der Passwörter:', err);
-        return res.status(500).json({ message: 'Serverfehler' });
-      }
-
-      if (!isMatch) {
-        return res.status(401).json({ message: 'Ungültiger Benutzername oder Passwort.' });
-      }
-
-      // Token generieren
-      const token = jwt.sign(
-        { id: user.id, username: user.username },
-        process.env.JWT_SECRET,
-        { expiresIn: '1h' }
-      );
-
-      res.status(200).json({
-        message: 'Erfolgreich eingeloggt.',
-        token: token,
-        userId: user.id,
-        username: user.username, // Benutzernamen hinzufügen
-      });
-    });
-  });
-});
-
-// Authentifizierungs-Middleware
-function authenticateToken(req, res, next) {
+// Middleware zur Authentifizierung
+const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
-  if (token == null) {
+  if (!token) {
     return res.status(401).json({ message: 'Kein Token bereitgestellt.' });
   }
 
@@ -152,15 +48,116 @@ function authenticateToken(req, res, next) {
     req.user = user;
     next();
   });
-}
+};
+
+// Root-Route hinzufügen
+app.get('/', (req, res) => {
+  res.status(200).json({ message: 'Körperanalyse App Server läuft!' });
+});
+
+// Registrierung
+app.post('/register', async (req, res) => {
+  const { username, password, email } = req.body;
+
+  if (!username || !password || !email) {
+    return res.status(400).json({ message: 'Bitte alle Felder ausfüllen.' });
+  }
+
+  try {
+    await connectDB();
+
+    // Überprüfen, ob der Benutzer bereits existiert
+    const [existingUser] = await connection.execute(
+      'SELECT * FROM users WHERE username = ? OR email = ?',
+      [username, email]
+    );
+
+    if (existingUser.length > 0) {
+      return res.status(409).json({ message: 'Benutzername oder E-Mail existiert bereits.' });
+    }
+
+    // Passwort hashen
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Benutzer in die Datenbank einfügen
+    await connection.execute(
+      'INSERT INTO users (username, password, email) VALUES (?, ?, ?)',
+      [username, hashedPassword, email]
+    );
+
+    res.status(200).json({ message: 'Benutzer erfolgreich registriert.' });
+  } catch (err) {
+    console.error('Fehler bei der Registrierung:', err);
+    res.status(500).json({ message: 'Serverfehler' });
+  }
+});
+
+// Login
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ message: 'Bitte Benutzername und Passwort eingeben.' });
+  }
+
+  try {
+    await connectDB();
+
+    // Benutzer finden
+    const [users] = await connection.execute('SELECT * FROM users WHERE username = ?', [username]);
+
+    if (users.length === 0) {
+      return res.status(401).json({ message: 'Ungültiger Benutzername oder Passwort.' });
+    }
+
+    const user = users[0];
+
+    // Passwort überprüfen
+    const match = await bcrypt.compare(password, user.password);
+
+    if (!match) {
+      return res.status(401).json({ message: 'Ungültiger Benutzername oder Passwort.' });
+    }
+
+    // Token generieren
+    const token = jwt.sign(
+      { id: user.id, username: user.username },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    res.status(200).json({
+      message: 'Erfolgreich eingeloggt.',
+      token: token,
+      userId: user.id,
+      username: user.username,
+    });
+  } catch (err) {
+    console.error('Fehler beim Login:', err);
+    res.status(500).json({ message: 'Serverfehler' });
+  }
+});
 
 // Beispiel für einen geschützten Endpunkt
-app.get('/profile', authenticateToken, (req, res) => {
-  res.json({ message: `Willkommen, ${req.user.username}!`, user: req.user });
+app.get('/profile', authenticateToken, async (req, res) => {
+  try {
+    await connectDB();
+    const [users] = await connection.execute('SELECT id, username, email FROM users WHERE id = ?', [req.user.id]);
+
+    if (users.length === 0) {
+      return res.status(404).json({ message: 'Benutzer nicht gefunden.' });
+    }
+
+    const user = users[0];
+    res.status(200).json({ user: user });
+  } catch (err) {
+    console.error('Fehler beim Abrufen des Profils:', err);
+    res.status(500).json({ message: 'Serverfehler' });
+  }
 });
 
 // Benutzer löschen
-app.delete('/users/:id', authenticateToken, (req, res) => {
+app.delete('/users/:id', authenticateToken, async (req, res) => {
   const userId = req.params.id;
 
   // Überprüfen, ob der angemeldete Benutzer der gleiche ist oder ob der Benutzer ein Administrator ist
@@ -168,19 +165,18 @@ app.delete('/users/:id', authenticateToken, (req, res) => {
     return res.status(403).json({ message: 'Sie sind nicht berechtigt, diesen Benutzer zu löschen.' });
   }
 
-  const deleteUserQuery = 'DELETE FROM users WHERE id = ?';
-  db.query(deleteUserQuery, [userId], (err, results) => {
-    if (err) {
-      console.error('Fehler beim Löschen des Benutzers:', err);
-      return res.status(500).json({ message: 'Serverfehler' });
-    }
+  try {
+    await connectDB();
+
+    const deleteUserQuery = 'DELETE FROM users WHERE id = ?';
+    await connection.execute(deleteUserQuery, [userId]);
+
     res.status(200).json({ message: 'Benutzer erfolgreich gelöscht.' });
-  });
+  } catch (err) {
+    console.error('Fehler beim Löschen des Benutzers:', err);
+    res.status(500).json({ message: 'Serverfehler' });
+  }
 });
 
-
-// Server starten
-const PORT = process.env.PORT || 3000; // Ändern Sie 3000 in 3001
-app.listen(PORT, () => {
-  console.log(`Server läuft auf Port ${PORT}`);
-});
+// Exportieren Sie die Express-App als Vercel-Serverless Function
+module.exports = app;
