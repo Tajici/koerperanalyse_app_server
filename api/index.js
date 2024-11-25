@@ -1,16 +1,17 @@
-// api/index.js
+// index.js
 
+require('dotenv').config(); // Umgebungsvariablen laden
 const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
-const cors = require('cors');
+const cors = require('cors'); // CORS hinzufügen
 const bcrypt = require('bcrypt');
-const mysql = require('mysql2/promise');
 const jwt = require('jsonwebtoken');
+const mysql = require('mysql2/promise');
 
 // Middleware
 app.use(bodyParser.json());
-app.use(cors());
+app.use(cors()); // CORS aktivieren
 
 // Datenbankverbindung
 const dbConfig = {
@@ -178,5 +179,9 @@ app.delete('/users/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Exportieren Sie die Express-App als Vercel-Serverless Function
-module.exports = app;
+// Server starten
+const port = process.env.PORT || 8080;
+
+app.listen(port, () => {
+  console.log(`Server läuft auf Port ${port}`);
+});
