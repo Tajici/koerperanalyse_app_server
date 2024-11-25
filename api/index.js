@@ -9,21 +9,18 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const mysql = require('mysql2/promise');
 
-// Middleware
-app.use(bodyParser.json());
-app.use(cors()); // CORS aktivieren
-
-// Datenbankverbindung
 const dbConfig = {
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_DATABASE,
+  ssl: {
+    rejectUnauthorized: true,
+  },
 };
 
 let connection;
 
-// Verbindung zur Datenbank herstellen
 const connectDB = async () => {
   if (!connection) {
     connection = await mysql.createConnection(dbConfig);
@@ -179,9 +176,5 @@ app.delete('/users/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Server starten
-const port = process.env.PORT || 8080;
+module.exports = app;
 
-app.listen(port, () => {
-  console.log(`Server läuft auf Port ${port}`);
-});
