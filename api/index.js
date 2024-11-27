@@ -3,9 +3,9 @@
 // Notwendige Module importieren
 const express = require('express');
 const mysql = require('mysql2/promise');
-const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
+const crypto = require('crypto'); // Hinzugefügt
 
 // Express-App erstellen
 const app = express();
@@ -32,6 +32,28 @@ const connectDB = async () => {
   }
 };
 
+// Funktion zum Hashen des Passworts mit PBKDF2
+const hashPassword = (password) => {
+  return new Promise((resolve, reject) => {
+    const salt = crypto.randomBytes(16).toString('hex');
+    crypto.pbkdf2(password, salt, 100000, 64, 'sha256', (err, derivedKey) => {
+      if (err) reject(err);
+      resolve(`${salt}:${derivedKey.toString('hex')}`);
+    });
+  });
+};
+
+// Funktion zum Verifizieren des Passworts
+const verifyPassword = (password, storedPassword) => {
+  return new Promise((resolve, reject) => {
+    const [salt, key] = storedPassword.split(':');
+    crypto.pbkdf2(password, salt, 100000, 64, 'sha256', (err, derivedKey) => {
+      if (err) reject(err);
+      resolve(key === derivedKey.toString('hex'));
+    });
+  });
+};
+
 // Registrierungsroute
 app.post('/register', async (req, res) => {
   try {
@@ -54,10 +76,10 @@ app.post('/register', async (req, res) => {
       return res.status(409).json({ message: 'Benutzername oder E-Mail existiert bereits.' });
     }
 
-    // Passwort hashen
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Passwort hashen mit PBKDF2
+    const hashedPassword = await hashPassword(password);
 
-    // Neuen Benutzer in die Datenbank einfügen
+    // Neuen Benutzer in die Datenbank einfügen 
     await connection.execute(
       'INSERT INTO users (username, password, email) VALUES (?, ?, ?)',
       [username, hashedPassword, email]
@@ -94,8 +116,8 @@ app.post('/login', async (req, res) => {
 
     const user = users[0];
 
-    // Passwort vergleichen
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    // Passwort vergleichen mit PBKDF2
+    const isPasswordValid = await verifyPassword(password, user.password);
 
     if (!isPasswordValid) {
       return res.status(401).json({ message: 'Ungültiger Benutzername oder Passwort.' });
