@@ -3,9 +3,9 @@
 // Notwendige Module importieren
 const express = require('express');
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
-const crypto = require('crypto'); // Integriertes Modul
 
 // Express-App erstellen
 const app = express();
@@ -18,7 +18,7 @@ app.use(cors());
 const dbConfig = {
   host: process.env.DB_HOST,          // z.B. '34.65.223.142'
   user: process.env.DB_USER,          // z.B. 'root'
-  password: process.env.DB_PASSWORD,  // Dein Datenbankpasswort
+  password: process.env.DB_PASSWORD,  // Ihr Datenbankpasswort
   database: process.env.DB_DATABASE,  // z.B. 'koerperanalyse_app'
 };
 
@@ -29,54 +29,6 @@ const connectDB = async () => {
   if (!connection || connection.state === 'disconnected') {
     connection = await mysql.createConnection(dbConfig);
     console.log('Mit der Datenbank verbunden');
-  }
-};
-
-// Funktion zur Generierung eines Salt mit höherer Länge
-const generateSalt = (length = 16) => {
-  return crypto.randomBytes(length).toString('hex'); // 16 Bytes = 32 Hex-Zeichen
-};
-
-// Funktion zum Hashen des Passworts mit PBKDF2
-const hashPassword = async (password) => {
-  const salt = generateSalt(); // Generiere ein sicheres Salt
-  const iterations = 600000;   // Anzahl der Iterationen
-  const keyLength = 32;        // Länge des abgeleiteten Schlüssels (32 Bytes = 256 Bits)
-  const digest = 'sha256';     // Hash-Funktion
-
-  const derivedKey = await crypto.promises.pbkdf2(password, salt, iterations, keyLength, digest);
-  const hash = derivedKey.toString('hex');
-  
-  return `pbkdf2:${digest}:${iterations}$${salt}$${hash}`;
-};
-
-// Funktion zum Verifizieren des Passworts
-const verifyPassword = async (password, storedPassword) => {
-  try {
-    const [method, digest, iterationsAndSaltAndHash] = storedPassword.split(':');
-    if (method !== 'pbkdf2' || digest !== 'sha256') {
-      return false; // Unsupported method or digest
-    }
-
-    const [iterationsStr, salt, hash] = iterationsAndSaltAndHash.split('$');
-    const iterations = parseInt(iterationsStr, 10);
-    const keyLength = 32;
-    
-    const derivedKey = await crypto.promises.pbkdf2(password, salt, iterations, keyLength, digest);
-    const derivedHash = derivedKey.toString('hex');
-
-    // Verwende timingSafeEqual für sicheren Vergleich
-    const hashBuffer = Buffer.from(hash, 'hex');
-    const derivedHashBuffer = Buffer.from(derivedHash, 'hex');
-
-    if (hashBuffer.length !== derivedHashBuffer.length) {
-      return false;
-    }
-
-    return crypto.timingSafeEqual(hashBuffer, derivedHashBuffer);
-  } catch (error) {
-    console.error('Fehler bei der Passwortverifizierung:', error);
-    return false;
   }
 };
 
@@ -102,8 +54,8 @@ app.post('/register', async (req, res) => {
       return res.status(409).json({ message: 'Benutzername oder E-Mail existiert bereits.' });
     }
 
-    // Passwort hashen mit PBKDF2
-    const hashedPassword = await hashPassword(password);
+    // Passwort hashen
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     // Neuen Benutzer in die Datenbank einfügen 
     await connection.execute(
@@ -142,8 +94,8 @@ app.post('/login', async (req, res) => {
 
     const user = users[0];
 
-    // Passwort vergleichen mit PBKDF2
-    const isPasswordValid = await verifyPassword(password, user.password);
+    // Passwort vergleichen
+    const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
       return res.status(401).json({ message: 'Ungültiger Benutzername oder Passwort.' });
