@@ -5,7 +5,7 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
-const crypto = require('crypto'); // Hinzugefügt
+const crypto = require('crypto'); // Integriertes Modul
 
 // Express-App erstellen
 const app = express();
@@ -18,7 +18,7 @@ app.use(cors());
 const dbConfig = {
   host: process.env.DB_HOST,          // z.B. '34.65.223.142'
   user: process.env.DB_USER,          // z.B. 'root'
-  password: process.env.DB_PASSWORD,  // Ihr Datenbankpasswort
+  password: process.env.DB_PASSWORD,  // Dein Datenbankpasswort
   database: process.env.DB_DATABASE,  // z.B. 'koerperanalyse_app'
 };
 
@@ -32,26 +32,52 @@ const connectDB = async () => {
   }
 };
 
+// Funktion zur Generierung eines Salt mit höherer Länge
+const generateSalt = (length = 16) => {
+  return crypto.randomBytes(length).toString('hex'); // 16 Bytes = 32 Hex-Zeichen
+};
+
 // Funktion zum Hashen des Passworts mit PBKDF2
-const hashPassword = (password) => {
-  return new Promise((resolve, reject) => {
-    const salt = crypto.randomBytes(16).toString('hex');
-    crypto.pbkdf2(password, salt, 100000, 64, 'sha256', (err, derivedKey) => {
-      if (err) reject(err);
-      resolve(`${salt}:${derivedKey.toString('hex')}`);
-    });
-  });
+const hashPassword = async (password) => {
+  const salt = generateSalt(); // Generiere ein sicheres Salt
+  const iterations = 600000;   // Anzahl der Iterationen
+  const keyLength = 32;        // Länge des abgeleiteten Schlüssels (32 Bytes = 256 Bits)
+  const digest = 'sha256';     // Hash-Funktion
+
+  const derivedKey = await crypto.promises.pbkdf2(password, salt, iterations, keyLength, digest);
+  const hash = derivedKey.toString('hex');
+  
+  return `pbkdf2:${digest}:${iterations}$${salt}$${hash}`;
 };
 
 // Funktion zum Verifizieren des Passworts
-const verifyPassword = (password, storedPassword) => {
-  return new Promise((resolve, reject) => {
-    const [salt, key] = storedPassword.split(':');
-    crypto.pbkdf2(password, salt, 100000, 64, 'sha256', (err, derivedKey) => {
-      if (err) reject(err);
-      resolve(key === derivedKey.toString('hex'));
-    });
-  });
+const verifyPassword = async (password, storedPassword) => {
+  try {
+    const [method, digest, iterationsAndSaltAndHash] = storedPassword.split(':');
+    if (method !== 'pbkdf2' || digest !== 'sha256') {
+      return false; // Unsupported method or digest
+    }
+
+    const [iterationsStr, salt, hash] = iterationsAndSaltAndHash.split('$');
+    const iterations = parseInt(iterationsStr, 10);
+    const keyLength = 32;
+    
+    const derivedKey = await crypto.promises.pbkdf2(password, salt, iterations, keyLength, digest);
+    const derivedHash = derivedKey.toString('hex');
+
+    // Verwende timingSafeEqual für sicheren Vergleich
+    const hashBuffer = Buffer.from(hash, 'hex');
+    const derivedHashBuffer = Buffer.from(derivedHash, 'hex');
+
+    if (hashBuffer.length !== derivedHashBuffer.length) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(hashBuffer, derivedHashBuffer);
+  } catch (error) {
+    console.error('Fehler bei der Passwortverifizierung:', error);
+    return false;
+  }
 };
 
 // Registrierungsroute
