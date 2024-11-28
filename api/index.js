@@ -25,11 +25,14 @@ const dbConfig = {
   database: process.env.DB_DATABASE,
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
 };
 
-// Verbindungspool erstellen
-const pool = mysql.createPool(dbConfig);
+// Verbindungspool erstellen außerhalb der Funktionen, um Wiederverwendung zu ermöglichen
+let pool;
+if (!pool) {
+  pool = mysql.createPool(dbConfig);
+}
 
 // Registrierungsroute
 app.post('/register', async (req, res) => {
@@ -134,3 +137,11 @@ app.get('/', (req, res) => {
 
 // Exportieren der serverless handler
 module.exports.handler = serverless(app);
+
+// Server starten, wenn die Datei direkt ausgeführt wird
+if (require.main === module) {
+  const PORT = process.env.PORT || 8080;
+  app.listen(PORT, () => {
+    console.log(`Server läuft auf Port ${PORT}`);
+  });
+}
