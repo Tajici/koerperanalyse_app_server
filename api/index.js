@@ -2,11 +2,11 @@
 
 const express = require('express');
 const mysql = require('mysql2/promise');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs'); // Verwenden von bcryptjs statt bcrypt
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const serverless = require('serverless-http'); // Importieren von serverless-http
+const serverless = require('serverless-http');
 
 // Laden der Umgebungsvariablen aus der .env Datei
 dotenv.config();
