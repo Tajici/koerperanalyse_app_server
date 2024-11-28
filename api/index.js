@@ -5,8 +5,10 @@ const mysql = require('mysql2/promise');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
+const dotenv = require('dotenv');
 
-const app = express();
+// Laden der Umgebungsvariablen aus der .env Datei
+dotenv.config();
 
 // Middleware
 app.use(express.json());
@@ -129,3 +131,10 @@ app.get('/', (req, res) => {
 
 // Express-App exportieren
 module.exports = app;
+
+if (require.main === module) {
+  const PORT = process.env.PORT || 8080;
+  app.listen(PORT, () => {
+    console.log(`Server läuft auf Port ${PORT}`);
+  });
+}
