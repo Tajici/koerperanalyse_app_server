@@ -26,25 +26,31 @@ const dbConfig = {
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  // Optional: Timeout für Verbindungen setzen
+  connectTimeout: 10000, // 10 Sekunden
 };
 
 // Verbindungspool erstellen außerhalb der Funktionen, um Wiederverwendung zu ermöglichen
 let pool;
 if (!pool) {
   pool = mysql.createPool(dbConfig);
+  console.log('Datenbank-Verbindungspool erstellt');
 }
 
 // Registrierungsroute
 app.post('/register', async (req, res) => {
+  console.log('Registrierungsanfrage erhalten');
   try {
     const { username, password, email } = req.body;
 
     // Eingabevalidierung
     if (!username || !password || !email) {
+      console.log('Eingabevalidierung fehlgeschlagen');
       return res.status(400).json({ message: 'Bitte alle Felder ausfüllen.' });
     }
 
     const connection = await pool.getConnection();
+    console.log('Datenbankverbindung erhalten für Registrierung');
 
     try {
       // Überprüfen, ob der Benutzername oder die E-Mail bereits existiert
@@ -54,21 +60,25 @@ app.post('/register', async (req, res) => {
       );
 
       if (existingUser.length > 0) {
+        console.log('Benutzername oder E-Mail existiert bereits');
         return res.status(409).json({ message: 'Benutzername oder E-Mail existiert bereits.' });
       }
 
       // Passwort hashen
       const hashedPassword = await bcrypt.hash(password, 10);
+      console.log('Passwort gehasht');
 
       // Neuen Benutzer in die Datenbank einfügen 
       await connection.execute(
         'INSERT INTO users (username, password, email) VALUES (?, ?, ?)',
         [username, hashedPassword, email]
       );
+      console.log('Neuer Benutzer in die Datenbank eingefügt');
 
       res.status(201).json({ message: 'Registrierung erfolgreich!' });
     } finally {
       connection.release();
+      console.log('Datenbankverbindung für Registrierung freigegeben');
     }
   } catch (error) {
     console.error('Fehler bei der Registrierung:', error);
@@ -78,15 +88,18 @@ app.post('/register', async (req, res) => {
 
 // Login-Route
 app.post('/login', async (req, res) => {
+  console.log('Login-Anfrage erhalten');
   try {
     const { username, password } = req.body;
 
     // Eingabevalidierung
     if (!username || !password) {
+      console.log('Eingabevalidierung fehlgeschlagen');
       return res.status(400).json({ message: 'Bitte alle Felder ausfüllen.' });
     }
 
     const connection = await pool.getConnection();
+    console.log('Datenbankverbindung erhalten für Login');
 
     try {
       // Benutzer in der Datenbank suchen
@@ -96,6 +109,7 @@ app.post('/login', async (req, res) => {
       );
 
       if (users.length === 0) {
+        console.log('Benutzername existiert nicht');
         return res.status(401).json({ message: 'Ungültiger Benutzername oder Passwort.' });
       }
 
@@ -103,8 +117,10 @@ app.post('/login', async (req, res) => {
 
       // Passwort vergleichen
       const isPasswordValid = await bcrypt.compare(password, user.password);
+      console.log('Passwortvergleich abgeschlossen');
 
       if (!isPasswordValid) {
+        console.log('Passwort ungültig');
         return res.status(401).json({ message: 'Ungültiger Benutzername oder Passwort.' });
       }
 
@@ -114,6 +130,7 @@ app.post('/login', async (req, res) => {
         process.env.JWT_SECRET,
         { expiresIn: '1h' }
       );
+      console.log('JWT-Token generiert');
 
       res.status(200).json({
         message: 'Login erfolgreich!',
@@ -123,6 +140,7 @@ app.post('/login', async (req, res) => {
       });
     } finally {
       connection.release();
+      console.log('Datenbankverbindung für Login freigegeben');
     }
   } catch (error) {
     console.error('Fehler beim Login:', error);
@@ -132,11 +150,12 @@ app.post('/login', async (req, res) => {
 
 // Testroute
 app.get('/', (req, res) => {
+  console.log('Testroute aufgerufen');
   res.status(200).json({ message: 'Körperanalyse App Server läuft!' });
 });
 
 // Exportieren der serverless handler
-module.exports = serverless(app);
+module.exports = serverless(app); // Korrigierter Export
 
 // Server starten, wenn die Datei direkt ausgeführt wird
 if (require.main === module) {
