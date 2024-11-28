@@ -10,6 +10,8 @@ const dotenv = require('dotenv');
 // Laden der Umgebungsvariablen aus der .env Datei
 dotenv.config();
 
+const app = express();
+
 // Middleware
 app.use(express.json());
 app.use(cors());
@@ -132,6 +134,7 @@ app.get('/', (req, res) => {
 // Express-App exportieren
 module.exports = app;
 
+// Server starten, wenn die Datei direkt ausgeführt wird
 if (require.main === module) {
   const PORT = process.env.PORT || 8080;
   app.listen(PORT, () => {
