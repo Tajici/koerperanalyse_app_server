@@ -6,6 +6,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const serverless = require('serverless-http'); // Importieren von serverless-http
 
 // Laden der Umgebungsvariablen aus der .env Datei
 dotenv.config();
@@ -18,12 +19,12 @@ app.use(cors());
 
 // Datenbankkonfiguration
 const dbConfig = {
-  host: process.env.DB_HOST,          // z.B. '34.65.223.142'
-  user: process.env.DB_USER,          // z.B. 'root'
-  password: process.env.DB_PASSWORD,  // Ihr Datenbankpasswort
-  database: process.env.DB_DATABASE,  // z.B. 'koerperanalyse_app'
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_DATABASE,
   waitForConnections: true,
-  connectionLimit: 10, // Passen Sie dies je nach Bedarf an
+  connectionLimit: 10,
   queueLimit: 0
 };
 
@@ -131,13 +132,5 @@ app.get('/', (req, res) => {
   res.status(200).json({ message: 'Körperanalyse App Server läuft!' });
 });
 
-// Express-App exportieren
-module.exports = app;
-
-// Server starten, wenn die Datei direkt ausgeführt wird
-if (require.main === module) {
-  const PORT = process.env.PORT || 8080;
-  app.listen(PORT, () => {
-    console.log(`Server läuft auf Port ${PORT}`);
-  });
-}
+// Exportieren der serverless handler
+module.exports.handler = serverless(app);
