@@ -136,7 +136,7 @@ app.get('/', (req, res) => {
 });
 
 // Exportieren der serverless handler
-module.exports.handler = serverless(app);
+module.exports = serverless(app);
 
 // Server starten, wenn die Datei direkt ausgeführt wird
 if (require.main === module) {
