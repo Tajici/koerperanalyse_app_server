@@ -8,21 +8,20 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const serverless = require('serverless-http');
 
-// .env laden
+// .env Variablen laden (nur lokal relevant, auf Vercel ignoriert er die .env-Datei,
+// da du dort die Variablen in den Settings hinterlegst)
 dotenv.config();
 
 const app = express();
-
-// Middleware
 app.use(express.json());
 app.use(cors());
 
-// Datenbankkonfiguration aus .env
+// Datenbankkonfiguration aus Umgebungsvariablen
 const dbConfig = {
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_DATABASE,
+  host: process.env.DB_HOST,         // z.B. bodyarc.helioho.st
+  user: process.env.DB_USER,         // z.B. flovhsr_bodyarc
+  password: process.env.DB_PASSWORD, // z.B. BodyArc!0
+  database: process.env.DB_DATABASE, // z.B. flovhsr_bodyarc
   port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306,
   waitForConnections: true,
   connectionLimit: 10,
@@ -30,7 +29,6 @@ const dbConfig = {
   connectTimeout: 10000,
 };
 
-// Verbindungspool
 let pool;
 if (!pool) {
   pool = mysql.createPool(dbConfig);
@@ -49,9 +47,10 @@ app.post('/register', async (req, res) => {
     }
 
     const connection = await pool.getConnection();
-    console.log('Datenbankverbindung erhalten für Registrierung');
+    console.log('Datenbankverbindung für Registrierung erhalten');
 
     try {
+      // Prüfen ob username oder email bereits existieren
       const [existingUser] = await connection.execute(
         'SELECT * FROM users WHERE username = ? OR email = ?',
         [username, email]
@@ -94,7 +93,7 @@ app.post('/login', async (req, res) => {
     }
 
     const connection = await pool.getConnection();
-    console.log('Datenbankverbindung erhalten für Login');
+    console.log('Datenbankverbindung für Login erhalten');
 
     try {
       const [users] = await connection.execute(
@@ -118,7 +117,7 @@ app.post('/login', async (req, res) => {
 
       const token = jwt.sign(
         { userId: user.id, username: user.username },
-        process.env.JWT_SECRET,
+        process.env.JWT_SECRET,  // z.B. bodyarcSECURITY010101
         { expiresIn: '1h' }
       );
       console.log('JWT-Token generiert');
@@ -145,10 +144,10 @@ app.get('/', (req, res) => {
   res.status(200).json({ message: 'Körperanalyse App Server läuft!' });
 });
 
-// Export für Vercel (Serverless)
+// Für Vercel als Serverless Function exportieren
 module.exports = serverless(app);
 
-// Lokaler Start, falls direkt ausgeführt
+// Lokal starten, falls die Datei direkt mit `node api/index.js` ausgeführt wird
 if (require.main === module) {
   const PORT = process.env.PORT || 8080;
   app.listen(PORT, () => {
