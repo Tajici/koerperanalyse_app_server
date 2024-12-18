@@ -8,8 +8,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const serverless = require('serverless-http');
 
-// .env Variablen laden (nur lokal relevant, auf Vercel ignoriert er die .env-Datei,
-// da du dort die Variablen in den Settings hinterlegst)
+// .env Variablen laden (nur lokal relevant)
 dotenv.config();
 
 const app = express();
@@ -29,6 +28,7 @@ const dbConfig = {
   connectTimeout: 10000,
 };
 
+// Verbindungspool erstellen
 let pool;
 if (!pool) {
   pool = mysql.createPool(dbConfig);
@@ -144,10 +144,16 @@ app.get('/', (req, res) => {
   res.status(200).json({ message: 'Körperanalyse App Server läuft!' });
 });
 
+// Neue einfache Test-Route ohne DB
+app.get('/test', (req, res) => {
+  console.log('Einfache Testroute aufgerufen');
+  res.status(200).json({ message: 'Testroute funktioniert!' });
+});
+
 // Für Vercel als Serverless Function exportieren
 module.exports = serverless(app);
 
-// Lokal starten, falls die Datei direkt mit `node api/index.js` ausgeführt wird
+// Lokal starten, falls die Datei direkt ausgeführt wird
 if (require.main === module) {
   const PORT = process.env.PORT || 8080;
   app.listen(PORT, () => {
