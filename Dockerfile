@@ -6,7 +6,7 @@ WORKDIR /usr/src/app
 
 # Paketdateien kopieren und Abhängigkeiten installieren
 COPY package*.json ./
-RUN npm install --production
+RUN npm ainstall --production
 
 # Anwendungscode kopieren
 COPY . .

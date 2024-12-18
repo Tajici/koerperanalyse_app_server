@@ -2,13 +2,13 @@
 
 const express = require('express');
 const mysql = require('mysql2/promise');
-const bcrypt = require('bcryptjs'); // Verwenden von bcryptjs statt bcrypt
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const serverless = require('serverless-http');
 
-// Laden der Umgebungsvariablen aus der .env Datei
+// .env laden
 dotenv.config();
 
 const app = express();
@@ -17,33 +17,32 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Datenbankkonfiguration
+// Datenbankkonfiguration aus .env
 const dbConfig = {
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_DATABASE,
+  port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  // Optional: Timeout für Verbindungen setzen
-  connectTimeout: 10000, // 10 Sekunden
+  connectTimeout: 10000,
 };
 
-// Verbindungspool erstellen außerhalb der Funktionen, um Wiederverwendung zu ermöglichen
+// Verbindungspool
 let pool;
 if (!pool) {
   pool = mysql.createPool(dbConfig);
   console.log('Datenbank-Verbindungspool erstellt');
 }
 
-// Registrierungsroute
+// Registrierungs-Route
 app.post('/register', async (req, res) => {
   console.log('Registrierungsanfrage erhalten');
   try {
     const { username, password, email } = req.body;
 
-    // Eingabevalidierung
     if (!username || !password || !email) {
       console.log('Eingabevalidierung fehlgeschlagen');
       return res.status(400).json({ message: 'Bitte alle Felder ausfüllen.' });
@@ -53,7 +52,6 @@ app.post('/register', async (req, res) => {
     console.log('Datenbankverbindung erhalten für Registrierung');
 
     try {
-      // Überprüfen, ob der Benutzername oder die E-Mail bereits existiert
       const [existingUser] = await connection.execute(
         'SELECT * FROM users WHERE username = ? OR email = ?',
         [username, email]
@@ -64,11 +62,9 @@ app.post('/register', async (req, res) => {
         return res.status(409).json({ message: 'Benutzername oder E-Mail existiert bereits.' });
       }
 
-      // Passwort hashen
       const hashedPassword = await bcrypt.hash(password, 10);
       console.log('Passwort gehasht');
 
-      // Neuen Benutzer in die Datenbank einfügen 
       await connection.execute(
         'INSERT INTO users (username, password, email) VALUES (?, ?, ?)',
         [username, hashedPassword, email]
@@ -92,7 +88,6 @@ app.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    // Eingabevalidierung
     if (!username || !password) {
       console.log('Eingabevalidierung fehlgeschlagen');
       return res.status(400).json({ message: 'Bitte alle Felder ausfüllen.' });
@@ -102,7 +97,6 @@ app.post('/login', async (req, res) => {
     console.log('Datenbankverbindung erhalten für Login');
 
     try {
-      // Benutzer in der Datenbank suchen
       const [users] = await connection.execute(
         'SELECT * FROM users WHERE username = ?',
         [username]
@@ -114,8 +108,6 @@ app.post('/login', async (req, res) => {
       }
 
       const user = users[0];
-
-      // Passwort vergleichen
       const isPasswordValid = await bcrypt.compare(password, user.password);
       console.log('Passwortvergleich abgeschlossen');
 
@@ -124,7 +116,6 @@ app.post('/login', async (req, res) => {
         return res.status(401).json({ message: 'Ungültiger Benutzername oder Passwort.' });
       }
 
-      // JWT-Token generieren
       const token = jwt.sign(
         { userId: user.id, username: user.username },
         process.env.JWT_SECRET,
@@ -154,10 +145,10 @@ app.get('/', (req, res) => {
   res.status(200).json({ message: 'Körperanalyse App Server läuft!' });
 });
 
-// Exportieren der serverless handler
-module.exports = serverless(app); // Korrigierter Export
+// Export für Vercel (Serverless)
+module.exports = serverless(app);
 
-// Server starten, wenn die Datei direkt ausgeführt wird
+// Lokaler Start, falls direkt ausgeführt
 if (require.main === module) {
   const PORT = process.env.PORT || 8080;
   app.listen(PORT, () => {
