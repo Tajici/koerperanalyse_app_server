@@ -75,8 +75,9 @@ app.post('/register', async (req, res) => {
 // Login-Route
 app.post('/login', async (req, res) => {
   console.log('Login-Anfrage erhalten');
+
   try {
-    const { identifier, password } = req.body; // "identifier" kann Benutzername oder E-Mail sein.
+    const { identifier, password } = req.body; // "identifier" kann Benutzername oder E-Mail sein
 
     // Eingabevalidierung
     if (!identifier || !password) {
@@ -100,10 +101,11 @@ app.post('/login', async (req, res) => {
       }
 
       const user = users[0];
+      console.log('Benutzer gefunden:', user);
 
       // Passwort vergleichen
       const isPasswordValid = await bcrypt.compare(password, user.password);
-      console.log('Passwortvergleich abgeschlossen');
+      console.log('Passwortvergleich abgeschlossen:', isPasswordValid);
 
       if (!isPasswordValid) {
         console.log('Passwort ungültig');
@@ -114,9 +116,9 @@ app.post('/login', async (req, res) => {
       const token = jwt.sign(
         { userId: user.id, username: user.username },
         process.env.JWT_SECRET,
-        { expiresIn: '1h' }
+        { expiresIn: '1h' } // Token-Gültigkeit: 1 Stunde
       );
-      console.log('JWT-Token generiert');
+      console.log('JWT-Token generiert:', token);
 
       res.status(200).json({
         message: 'Login erfolgreich!',
@@ -133,6 +135,7 @@ app.post('/login', async (req, res) => {
     res.status(500).json({ message: 'Serverfehler beim Login.' });
   }
 });
+
 
 
 // Testroute
