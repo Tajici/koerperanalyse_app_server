@@ -8,20 +8,18 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const serverless = require('serverless-http');
 
-// .env Variablen laden (nur lokal relevant, auf Vercel ignoriert er die .env-Datei,
-// da du dort die Variablen in den Settings hinterlegst)
 dotenv.config();
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Datenbankkonfiguration aus Umgebungsvariablen
+// Datenbankkonfiguration
 const dbConfig = {
-  host: process.env.DB_HOST,     // z.B. bodyarc.helioho.st
-  user: process.env.DB_USER,     // z.B. flovhsr_bodyarc
-  password: process.env.DB_PASSWORD, // z.B. BodyArc!0
-  database: process.env.DB_DATABASE, // z.B. flovhsr_bodyarc
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD, 
+  database: process.env.DB_DATABASE, 
   port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306,
   waitForConnections: true,
   connectionLimit: 10,
@@ -74,42 +72,51 @@ app.post('/register', async (req, res) => {
     res.status(500).json({ message: 'Serverfehler bei der Registrierung.' });
   }
 });
-
 // Login-Route
 app.post('/login', async (req, res) => {
   console.log('Login-Anfrage erhalten');
   try {
-    const { username, password } = req.body;
+    const { identifier, password } = req.body; // "identifier" kann Benutzername oder E-Mail sein.
 
-    if (!username || !password) {
+    // Eingabevalidierung
+    if (!identifier || !password) {
+      console.log('Eingabevalidierung fehlgeschlagen');
       return res.status(400).json({ message: 'Bitte alle Felder ausfüllen.' });
     }
 
     const connection = await pool.getConnection();
-    console.log('Datenbankverbindung für Login erhalten');
+    console.log('Datenbankverbindung erhalten für Login');
 
     try {
+      // Benutzer anhand von Benutzername oder E-Mail finden
       const [users] = await connection.execute(
-        'SELECT * FROM users WHERE username = ?',
-        [username]
+        'SELECT * FROM users WHERE username = ? OR email = ?',
+        [identifier, identifier]
       );
 
       if (users.length === 0) {
-        return res.status(401).json({ message: 'Ungültiger Benutzername oder Passwort.' });
+        console.log('Benutzername oder E-Mail existiert nicht');
+        return res.status(401).json({ message: 'Ungültiger Benutzername, E-Mail oder Passwort.' });
       }
 
       const user = users[0];
+
+      // Passwort vergleichen
       const isPasswordValid = await bcrypt.compare(password, user.password);
+      console.log('Passwortvergleich abgeschlossen');
 
       if (!isPasswordValid) {
-        return res.status(401).json({ message: 'Ungültiger Benutzername oder Passwort.' });
+        console.log('Passwort ungültig');
+        return res.status(401).json({ message: 'Ungültiger Benutzername, E-Mail oder Passwort.' });
       }
 
+      // JWT-Token generieren
       const token = jwt.sign(
         { userId: user.id, username: user.username },
-        process.env.JWT_SECRET,  // z.B. bodyarcSECURITY010101
+        process.env.JWT_SECRET,
         { expiresIn: '1h' }
       );
+      console.log('JWT-Token generiert');
 
       res.status(200).json({
         message: 'Login erfolgreich!',
@@ -119,12 +126,14 @@ app.post('/login', async (req, res) => {
       });
     } finally {
       connection.release();
+      console.log('Datenbankverbindung für Login freigegeben');
     }
   } catch (error) {
     console.error('Fehler beim Login:', error);
     res.status(500).json({ message: 'Serverfehler beim Login.' });
   }
 });
+
 
 // Testroute
 app.get('/', (req, res) => {
