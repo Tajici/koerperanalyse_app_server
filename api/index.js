@@ -77,10 +77,12 @@ app.post('/login', async (req, res) => {
   console.log('Login-Anfrage erhalten');
 
   try {
-    const { identifier, password } = req.body; // "identifier" kann Benutzername oder E-Mail sein
+    const { identifier, username, email, password } = req.body;
 
-    // Eingabevalidierung
-    if (!identifier || !password) {
+    // Priorität: identifier > username > email
+    let loginIdentifier = identifier || username || email;
+
+    if (!loginIdentifier || !password) {
       console.log('Eingabevalidierung fehlgeschlagen');
       return res.status(400).json({ message: 'Bitte alle Felder ausfüllen.' });
     }
@@ -92,7 +94,7 @@ app.post('/login', async (req, res) => {
       // Benutzer anhand von Benutzername oder E-Mail finden
       const [users] = await connection.execute(
         'SELECT * FROM users WHERE username = ? OR email = ?',
-        [identifier, identifier]
+        [loginIdentifier, loginIdentifier]
       );
 
       if (users.length === 0) {
