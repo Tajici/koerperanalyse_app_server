@@ -34,7 +34,7 @@ console.log('Datenbank-Verbindungspool erstellt');
 app.post('/register', async (req, res) => {
   console.log('Registrierungsanfrage erhalten');
   try {
-    // Hier werden die Spalten an die neue Struktur angepasst: benutzername, passwort, email und optionale Felder
+    // Erwarte die Felder: benutzername, passwort, email sowie optionale Felder
     const { benutzername, passwort, email, alter, geschlecht, groesse } = req.body;
 
     if (!benutzername || !passwort || !email) {
@@ -45,7 +45,7 @@ app.post('/register', async (req, res) => {
     console.log('Datenbankverbindung für Registrierung erhalten');
 
     try {
-      // Prüfen, ob benutzername oder email bereits existieren
+      // Prüfen, ob der Benutzername oder die E-Mail bereits existiert
       const [existingUser] = await connection.execute(
         'SELECT * FROM benutzer WHERE benutzername = ? OR email = ?',
         [benutzername, email]
@@ -55,9 +55,11 @@ app.post('/register', async (req, res) => {
         return res.status(409).json({ message: 'Benutzername oder E-Mail existiert bereits.' });
       }
 
+      // Passwort verschlüsseln
       const hashedPassword = await bcrypt.hash(passwort, 10);
+      // Achte darauf, dass "alter" in Backticks steht, da es ein reserviertes SQL-Schlüsselwort ist.
       await connection.execute(
-        'INSERT INTO benutzer (benutzername, passwort, email, alter, geschlecht, groesse) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO benutzer (benutzername, passwort, email, `alter`, geschlecht, groesse) VALUES (?, ?, ?, ?, ?, ?)',
         [benutzername, hashedPassword, email, alter || null, geschlecht || null, groesse || null]
       );
 
@@ -76,7 +78,7 @@ app.post('/login', async (req, res) => {
   console.log('Login-Anfrage erhalten');
 
   try {
-    // Bei der Anmeldung wird ebenfalls auf die angepassten Spaltennamen zurückgegriffen:
+    // Erwarte entweder identifier, benutzername oder email als Login-Identifikator und passwort
     const { identifier, benutzername, email, passwort } = req.body;
     let loginIdentifier = identifier || benutzername || email;
 
@@ -103,7 +105,7 @@ app.post('/login', async (req, res) => {
       const user = users[0];
       console.log('Benutzer gefunden:', user);
 
-      // Passwortvergleich mit der Spalte passwort
+      // Passwortvergleich
       const isPasswordValid = await bcrypt.compare(passwort, user.passwort);
       console.log('Passwortvergleich abgeschlossen:', isPasswordValid);
 
@@ -112,7 +114,7 @@ app.post('/login', async (req, res) => {
         return res.status(401).json({ message: 'Ungültiger Benutzername, E-Mail oder Passwort.' });
       }
 
-      // JWT-Token generieren, hier wird der benutzername verwendet
+      // JWT-Token generieren
       const token = jwt.sign(
         { userId: user.id, benutzername: user.benutzername },
         process.env.JWT_SECRET,
@@ -144,7 +146,7 @@ app.get('/', (req, res) => {
 // Export für Vercel als Serverless Function
 module.exports = serverless(app);
 
-// Lokal starten, falls die Datei direkt mit `node api/index.js` ausgeführt wird
+// Lokal starten, falls die Datei direkt mit `node index.js` ausgeführt wird
 if (require.main === module) {
   const PORT = process.env.PORT || 8080;
   app.listen(PORT, () => {
