@@ -34,7 +34,6 @@ console.log('Datenbank-Verbindungspool erstellt');
 app.post('/register', async (req, res) => {
   console.log('Registrierungsanfrage erhalten');
   try {
-    // Erwarte die Felder: benutzername, passwort, email sowie optionale Felder
     const { benutzername, passwort, email, alter, geschlecht, groesse } = req.body;
 
     if (!benutzername || !passwort || !email) {
@@ -57,7 +56,6 @@ app.post('/register', async (req, res) => {
 
       // Passwort verschlüsseln
       const hashedPassword = await bcrypt.hash(passwort, 10);
-      // Achte darauf, dass "alter" in Backticks steht, da es ein reserviertes SQL-Schlüsselwort ist.
       await connection.execute(
         'INSERT INTO benutzer (benutzername, passwort, email, `alter`, geschlecht, groesse) VALUES (?, ?, ?, ?, ?, ?)',
         [benutzername, hashedPassword, email, alter || null, geschlecht || null, groesse || null]
@@ -78,7 +76,6 @@ app.post('/login', async (req, res) => {
   console.log('Login-Anfrage erhalten');
 
   try {
-    // Erwarte entweder identifier, benutzername oder email als Login-Identifikator und passwort
     const { identifier, benutzername, email, passwort } = req.body;
     let loginIdentifier = identifier || benutzername || email;
 
@@ -91,7 +88,6 @@ app.post('/login', async (req, res) => {
     console.log('Datenbankverbindung erhalten für Login');
 
     try {
-      // Suche in der Tabelle benutzer anhand von benutzername oder email
       const [users] = await connection.execute(
         'SELECT * FROM benutzer WHERE benutzername = ? OR email = ?',
         [loginIdentifier, loginIdentifier]
@@ -105,7 +101,6 @@ app.post('/login', async (req, res) => {
       const user = users[0];
       console.log('Benutzer gefunden:', user);
 
-      // Passwortvergleich
       const isPasswordValid = await bcrypt.compare(passwort, user.passwort);
       console.log('Passwortvergleich abgeschlossen:', isPasswordValid);
 
@@ -135,6 +130,51 @@ app.post('/login', async (req, res) => {
   } catch (error) {
     console.error('Fehler beim Login:', error);
     res.status(500).json({ message: 'Serverfehler beim Login.' });
+  }
+});
+
+// Chat-Endpoint
+app.post('/chat', async (req, res) => {
+  // Authentifizierung mittels JWT
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ message: 'Kein Token vorhanden.' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('Token validiert:', decoded);
+  } catch (error) {
+    return res.status(401).json({ message: 'Ungültiges Token.' });
+  }
+
+  // Nachricht und optionale Nutzerdaten entgegennehmen
+  const { message, userData } = req.body;
+  if (!message) {
+    return res.status(400).json({ message: 'Keine Nachricht erhalten.' });
+  }
+  
+  // Prompt erstellen, der Messdaten und Nutzerfrage integriert
+  const prompt = `Der Nutzer hat folgende Messdaten: ${JSON.stringify(userData)}.
+Nutzer: ${message}
+Bot:`;
+
+  try {
+    // Hier erfolgt die Integration mit der OpenAI-API.
+    // Beispiel mit Dummy-Antwort – später kannst du den echten API-Aufruf einbauen:
+    // const response = await openai.createCompletion({
+    //   model: 'text-davinci-003',
+    //   prompt: prompt,
+    //   max_tokens: 150,
+    //   temperature: 0.7,
+    // });
+    // const reply = response.data.choices[0].text.trim();
+
+    const reply = "Dies ist eine Beispielantwort vom ChatBot.";
+    res.status(200).json({ reply });
+  } catch (error) {
+    console.error('Fehler bei der Kommunikation mit OpenAI:', error);
+    res.status(500).json({ message: 'Fehler bei der Kommunikation mit OpenAI' });
   }
 });
 
