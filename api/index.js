@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const serverless = require('serverless-http');
-const { Configuration, OpenAIApi } = require("openai");
+const fetch = require("node-fetch"); // Für Mistral API
 
 dotenv.config();
 
@@ -31,17 +31,12 @@ const dbConfig = {
 let pool = mysql.createPool(dbConfig);
 console.log('Datenbank-Verbindungspool erstellt');
 
-// OpenAI-Konfiguration
-const OpenAI = require("openai");
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
+// Mistral API Konfiguration
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
+const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
 
 // Registrierungs-Route
 app.post('/register', async (req, res) => {
-  console.log('Registrierungsanfrage erhalten');
   try {
     const { benutzername, passwort, email, alter, geschlecht, groesse } = req.body;
 
@@ -50,28 +45,23 @@ app.post('/register', async (req, res) => {
     }
 
     const connection = await pool.getConnection();
-    console.log('Datenbankverbindung für Registrierung erhalten');
+    const [existingUser] = await connection.execute(
+      'SELECT * FROM benutzer WHERE benutzername = ? OR email = ?',
+      [benutzername, email]
+    );
 
-    try {
-      const [existingUser] = await connection.execute(
-        'SELECT * FROM benutzer WHERE benutzername = ? OR email = ?',
-        [benutzername, email]
-      );
-
-      if (existingUser.length > 0) {
-        return res.status(409).json({ message: 'Benutzername oder E-Mail existiert bereits.' });
-      }
-
-      const hashedPassword = await bcrypt.hash(passwort, 10);
-      await connection.execute(
-        'INSERT INTO benutzer (benutzername, passwort, email, `alter`, geschlecht, groesse) VALUES (?, ?, ?, ?, ?, ?)',
-        [benutzername, hashedPassword, email, alter || null, geschlecht || null, groesse || null]
-      );
-
-      res.status(201).json({ message: 'Registrierung erfolgreich!' });
-    } finally {
-      connection.release();
+    if (existingUser.length > 0) {
+      return res.status(409).json({ message: 'Benutzername oder E-Mail existiert bereits.' });
     }
+
+    const hashedPassword = await bcrypt.hash(passwort, 10);
+    await connection.execute(
+      'INSERT INTO benutzer (benutzername, passwort, email, `alter`, geschlecht, groesse) VALUES (?, ?, ?, ?, ?, ?)',
+      [benutzername, hashedPassword, email, alter || null, geschlecht || null, groesse || null]
+    );
+
+    connection.release();
+    res.status(201).json({ message: 'Registrierung erfolgreich!' });
   } catch (error) {
     console.error('Fehler bei der Registrierung:', error);
     res.status(500).json({ message: 'Serverfehler bei der Registrierung.' });
@@ -80,72 +70,57 @@ app.post('/register', async (req, res) => {
 
 // Login-Route
 app.post('/login', async (req, res) => {
-  console.log('Login-Anfrage erhalten');
-
   try {
-    const { identifier, benutzername, email, passwort } = req.body;
-    let loginIdentifier = identifier || benutzername || email;
+    const { identifier, passwort } = req.body;
 
-    if (!loginIdentifier || !passwort) {
-      console.log('Eingabevalidierung fehlgeschlagen');
+    if (!identifier || !passwort) {
       return res.status(400).json({ message: 'Bitte alle Felder ausfüllen.' });
     }
 
     const connection = await pool.getConnection();
-    console.log('Datenbankverbindung erhalten für Login');
+    const [users] = await connection.execute(
+      'SELECT * FROM benutzer WHERE benutzername = ? OR email = ?',
+      [identifier, identifier]
+    );
 
-    try {
-      const [users] = await connection.execute(
-        'SELECT * FROM benutzer WHERE benutzername = ? OR email = ?',
-        [loginIdentifier, loginIdentifier]
-      );
-
-      if (users.length === 0) {
-        console.log('Benutzername oder E-Mail existiert nicht');
-        return res.status(401).json({ message: 'Ungültiger Benutzername, E-Mail oder Passwort.' });
-      }
-
-      const user = users[0];
-      console.log('Benutzer gefunden:', user);
-
-      const isPasswordValid = await bcrypt.compare(passwort, user.passwort);
-      console.log('Passwortvergleich abgeschlossen:', isPasswordValid);
-
-      if (!isPasswordValid) {
-        console.log('Passwort ungültig');
-        return res.status(401).json({ message: 'Ungültiger Benutzername, E-Mail oder Passwort.' });
-      }
-
-      const token = jwt.sign(
-        { userId: user.id, benutzername: user.benutzername },
-        process.env.JWT_SECRET,
-        { expiresIn: '1h' }
-      );
-      console.log('JWT-Token generiert:', token);
-
-      res.status(200).json({
-        message: 'Login erfolgreich!',
-        token: token,
-        userId: user.id,
-        benutzername: user.benutzername,
-      });
-    } finally {
-      connection.release();
-      console.log('Datenbankverbindung für Login freigegeben');
+    if (users.length === 0) {
+      return res.status(401).json({ message: 'Ungültiger Benutzername, E-Mail oder Passwort.' });
     }
+
+    const user = users[0];
+    const isPasswordValid = await bcrypt.compare(passwort, user.passwort);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Ungültiger Benutzername, E-Mail oder Passwort.' });
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, benutzername: user.benutzername },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    connection.release();
+    res.status(200).json({
+      message: 'Login erfolgreich!',
+      token: token,
+      userId: user.id,
+      benutzername: user.benutzername,
+    });
   } catch (error) {
     console.error('Fehler beim Login:', error);
     res.status(500).json({ message: 'Serverfehler beim Login.' });
   }
 });
 
-// Chat-Endpoint mit OpenAI-Integration (Modell: gpt-4o-2024-11-20)
+// Chat-Endpoint mit Mistral AI
 app.post('/chat', async (req, res) => {
   // Authentifizierung mittels JWT
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     return res.status(401).json({ message: 'Kein Token vorhanden.' });
   }
+
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -154,41 +129,42 @@ app.post('/chat', async (req, res) => {
     return res.status(401).json({ message: 'Ungültiges Token.' });
   }
 
-  // Nachricht und optionale Nutzerdaten entgegennehmen
-  const { message, userData } = req.body;
+  // Nachricht empfangen
+  const { message } = req.body;
   if (!message) {
     return res.status(400).json({ message: 'Keine Nachricht erhalten.' });
   }
-  
-  // Erstelle den Chat-Prompt als Nachrichten-Array
-  const systemMessage = "Du bist ein hilfreicher Chatbot.";
-  const userMessage = `Der Nutzer hat folgende Messdaten: ${JSON.stringify(userData)}.
-Nutzer: ${message}
-Bot:`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: systemMessage },
-        { role: "user", content: userMessage }
-      ],
-      max_tokens: 150,
-      temperature: 0.7,
+    const response = await fetch(MISTRAL_API_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${MISTRAL_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "mistral-medium",
+        messages: [
+          { role: "system", content: "Du bist ein hilfreicher KI-Assistent." },
+          { role: "user", content: message }
+        ],
+        max_tokens: 150,
+        temperature: 0.7
+      })
     });
-    
-    // Extrahiere die Antwort aus der neuen API-Struktur
-    const reply = response.choices[0].message.content.trim();
-    res.status(200).json({ reply });
+
+    const data = await response.json();
+
+    if (!data.choices || data.choices.length === 0) {
+      throw new Error("Keine Antwort von Mistral AI erhalten");
+    }
+
+    res.status(200).json({ reply: data.choices[0].message.content.trim() });
   } catch (error) {
-    console.error('Fehler bei der Kommunikation mit OpenAI:', error.response ? error.response.data : error.message);
-    res.status(500).json({ 
-      message: 'Fehler bei der Kommunikation mit OpenAI', 
-      error: error.response ? error.response.data : error.message 
-    });
+    console.error("Fehler bei Mistral AI:", error);
+    res.status(500).json({ message: "Fehler bei der Kommunikation mit Mistral AI", error: error.message });
   }
 });
-
 
 // Testroute
 app.get('/', (req, res) => {
