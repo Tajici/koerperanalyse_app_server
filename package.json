@@ -13,7 +13,6 @@
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.0",
     "mysql2": "^3.3.0",
-    "openai": "^4.88.0",
     "serverless-http": "^2.7.0"
   },
   "author": "",
