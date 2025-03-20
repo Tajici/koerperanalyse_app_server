@@ -32,10 +32,12 @@ let pool = mysql.createPool(dbConfig);
 console.log('Datenbank-Verbindungspool erstellt');
 
 // OpenAI-Konfiguration
-const configuration = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY, // Stelle sicher, dass dieser Schlüssel in deiner .env-Datei steht
+const OpenAI = require("openai");
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
-const openai = new OpenAIApi(configuration);
+
 
 // Registrierungs-Route
 app.post('/register', async (req, res) => {
@@ -137,7 +139,7 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// Chat-Endpoint mit OpenAI-Integration
+// Chat-Endpoint mit OpenAI-Integration (Modell: gpt-4o-2024-11-20)
 app.post('/chat', async (req, res) => {
   // Authentifizierung mittels JWT
   const authHeader = req.headers.authorization;
@@ -158,25 +160,35 @@ app.post('/chat', async (req, res) => {
     return res.status(400).json({ message: 'Keine Nachricht erhalten.' });
   }
   
-  // Prompt erstellen, der Messdaten und Nutzerfrage integriert
-  const prompt = `Der Nutzer hat folgende Messdaten: ${JSON.stringify(userData)}.
+  // Erstelle den Chat-Prompt als Nachrichten-Array
+  const systemMessage = "Du bist ein hilfreicher Chatbot.";
+  const userMessage = `Der Nutzer hat folgende Messdaten: ${JSON.stringify(userData)}.
 Nutzer: ${message}
 Bot:`;
 
   try {
-    const response = await openai.createCompletion({
-      model: 'text-davinci-003', // Oder ein anderes Modell, falls gewünscht
-      prompt: prompt,
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemMessage },
+        { role: "user", content: userMessage }
+      ],
       max_tokens: 150,
       temperature: 0.7,
     });
-    const reply = response.data.choices[0].text.trim();
+    
+    // Extrahiere die Antwort aus der neuen API-Struktur
+    const reply = response.choices[0].message.content.trim();
     res.status(200).json({ reply });
   } catch (error) {
-    console.error('Fehler bei der Kommunikation mit OpenAI:', error);
-    res.status(500).json({ message: 'Fehler bei der Kommunikation mit OpenAI' });
+    console.error('Fehler bei der Kommunikation mit OpenAI:', error.response ? error.response.data : error.message);
+    res.status(500).json({ 
+      message: 'Fehler bei der Kommunikation mit OpenAI', 
+      error: error.response ? error.response.data : error.message 
+    });
   }
 });
+
 
 // Testroute
 app.get('/', (req, res) => {
