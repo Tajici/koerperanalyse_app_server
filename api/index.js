@@ -7,7 +7,8 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const serverless = require('serverless-http');
-const fetch = require("node-fetch"); // Für Mistral API
+const fetch = global.fetch || require("node-fetch");
+
 
 dotenv.config();
 
