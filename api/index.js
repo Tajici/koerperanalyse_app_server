@@ -167,6 +167,37 @@ app.post('/chat', async (req, res) => {
   }
 });
 
+// Statistiken für einen Benutzer abrufen
+app.get('/statistiken/:userId', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ message: 'Kein Token vorhanden.' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    jwt.verify(token, process.env.JWT_SECRET); // Token prüfen
+  } catch (error) {
+    return res.status(401).json({ message: 'Ungültiges Token.' });
+  }
+
+  const userId = req.params.userId;
+
+  try {
+    const connection = await pool.getConnection();
+    const [rows] = await connection.execute(
+      'SELECT datum, koerpergewicht, fettanteil, muskelanteil, wasseranteil FROM statistiken WHERE benutzer_id = ? ORDER BY datum ASC',
+      [userId]
+    );
+    connection.release();
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error('Fehler beim Abrufen der Statistiken:', error);
+    res.status(500).json({ message: 'Serverfehler beim Abrufen der Statistiken.' });
+  }
+});
+
+
 // Testroute
 app.get('/', (req, res) => {
   res.status(200).json({ message: 'Körperanalyse App Server läuft!' });
