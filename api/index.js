@@ -114,29 +114,49 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// Chat-Endpoint mit Mistral AI
+// Chat-Endpoint mit Mistral AI + Benutzerwerte
 app.post('/chat', async (req, res) => {
-  // Authentifizierung mittels JWT
   const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ message: 'Kein Token vorhanden.' });
-  }
+  if (!authHeader) return res.status(401).json({ message: 'Kein Token vorhanden.' });
 
   const token = authHeader.split(' ')[1];
+  let decoded;
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
     console.log('Token validiert:', decoded);
   } catch (error) {
     return res.status(401).json({ message: 'Ungültiges Token.' });
   }
 
-  // Nachricht empfangen
+  const userId = decoded.userId;
   const { message } = req.body;
-  if (!message) {
-    return res.status(400).json({ message: 'Keine Nachricht erhalten.' });
-  }
+  if (!message) return res.status(400).json({ message: 'Keine Nachricht erhalten.' });
 
   try {
+    // ➤ Aktuellste Statistik-Daten abrufen
+    const connection = await pool.getConnection();
+    const [rows] = await connection.execute(
+      `SELECT * FROM statistiken WHERE benutzer_id = ? ORDER BY datum DESC LIMIT 1`,
+      [userId]
+    );
+    connection.release();
+
+    let systemPrompt = `Du bist ein motivierender Fitness-Coach. Gib dem Benutzer Tipps zur Verbesserung seiner Fitness basierend auf seinen Werten.`;
+
+    if (rows.length > 0) {
+      const { koerpergewicht, fettanteil, muskelanteil, wasseranteil } = rows[0];
+      systemPrompt += `
+Der Benutzer hat aktuell:
+- Gewicht: ${koerpergewicht} kg
+- Fettanteil: ${fettanteil} %
+- Muskelanteil: ${muskelanteil} %
+- Wasseranteil: ${wasseranteil} %
+
+Gib individuelle Ratschläge zur Ernährung, zum Training und Motivation, damit der Benutzer seine Ziele erreicht. Achte darauf, freundlich, verständlich und aufbauend zu antworten.`;
+    } else {
+      systemPrompt += ` Es sind keine aktuellen Messwerte verfügbar. Gib allgemeine Fitness-Tipps.`;
+    }
+
     const response = await fetch(MISTRAL_API_URL, {
       method: "POST",
       headers: {
@@ -146,15 +166,14 @@ app.post('/chat', async (req, res) => {
       body: JSON.stringify({
         model: "mistral-medium",
         messages: [
-          { role: "system", content: "Du bist ein hilfreicher KI-Assistent." },
+          { role: "system", content: systemPrompt },
           { role: "user", content: message }
         ],
-        max_tokens: 150,
+        max_tokens: 300,
         temperature: 0.7
       })
     });
 
-    // 👉 Neue Fehlerbehandlung bei Nicht-200-Antwort
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Mistral API Fehlerantwort:", errorText);
@@ -177,6 +196,7 @@ app.post('/chat', async (req, res) => {
     res.status(500).json({ message: "Fehler bei der Kommunikation mit Mistral AI", error: error.message });
   }
 });
+
 
 
 // Statistiken für einen Benutzer abrufen
