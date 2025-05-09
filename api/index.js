@@ -154,7 +154,18 @@ app.post('/chat', async (req, res) => {
       })
     });
 
+    // 👉 Neue Fehlerbehandlung bei Nicht-200-Antwort
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Mistral API Fehlerantwort:", errorText);
+      return res.status(500).json({
+        message: "Fehler bei der Kommunikation mit Mistral AI",
+        error: `HTTP ${response.status} – ${errorText}`
+      });
+    }
+
     const data = await response.json();
+    console.log("Mistral API Antwort:", JSON.stringify(data, null, 2));
 
     if (!data.choices || data.choices.length === 0) {
       throw new Error("Keine Antwort von Mistral AI erhalten");
@@ -166,6 +177,7 @@ app.post('/chat', async (req, res) => {
     res.status(500).json({ message: "Fehler bei der Kommunikation mit Mistral AI", error: error.message });
   }
 });
+
 
 // Statistiken für einen Benutzer abrufen
 app.get('/statistiken/:userId', async (req, res) => {
