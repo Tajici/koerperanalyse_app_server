@@ -164,7 +164,7 @@ Gib individuelle Ratschläge zur Ernährung, zum Training und Motivation, damit 
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "mistral-7b-v0.1",
+        model: "mistral-small-latest",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: message }
